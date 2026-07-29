@@ -442,12 +442,12 @@ const isMethodPathDirty = computed(() =>
 )
 
 const tabs = computed(() => {
-  const base = [
-    { id: 'headers' as const,   label: 'Headers',   count: headers.value.filter(h => h.key).length },
-    { id: 'body' as const,      label: 'Body',      count: 0 },
+  const base: { id: 'headers' | 'body' | 'variables'; label: string; count: number }[] = [
+    { id: 'headers',   label: 'Headers',   count: headers.value.filter(h => h.key).length },
+    { id: 'body',      label: 'Body',      count: 0 },
   ]
   if (isAdmin.value) {
-    base.push({ id: 'variables' as const, label: 'Variables', count: variableRows.value.filter(r => r.key.trim()).length })
+    base.push({ id: 'variables', label: 'Variables', count: variableRows.value.filter(r => r.key.trim()).length })
   }
   return base
 })
