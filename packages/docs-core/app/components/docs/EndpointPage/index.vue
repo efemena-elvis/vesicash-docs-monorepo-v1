@@ -329,7 +329,6 @@
       :body="(mergedFields.body as string | null) ?? page.body ?? null"
       :auth="(mergedFields.testLabAuth as string | null) ?? null"
       @close="closeTestLab"
-      @save-auth="onSaveTestLabAuth"
       @save-headers="onSaveTestLabHeaders"
       @save-body="onSaveTestLabBody"
       @save-response="onSaveTestLabResponse"

@@ -132,32 +132,6 @@
       </div>
 
       <div class="flex-1 overflow-y-auto">
-        <!-- Auth tab -->
-        <div v-if="activeTab === 'auth'" class="p-5 space-y-4">
-          <div>
-            <label class="tl-label">API Key <span class="tl-label-sub">x-api-key header</span></label>
-            <div class="relative">
-              <input
-                :type="showApiKey ? 'text' : 'password'"
-                :value="authKey"
-                placeholder="Enter your API key…"
-                class="tl-input pr-10"
-                autocomplete="off"
-                spellcheck="false"
-                @input="authKey = ($event.target as HTMLInputElement).value"
-              />
-              <button
-                type="button"
-                class="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted dark:text-dark-subtle hover:text-ink-primary dark:hover:text-dark-text transition-colors"
-                @click="showApiKey = !showApiKey"
-              >
-                <UiIcon :name="showApiKey ? 'eyeOff' : 'eye'" size="xs" />
-              </button>
-            </div>
-            <p class="mt-1.5 text-[11px] text-ink-muted dark:text-dark-subtle">Sent as <code class="font-mono text-brand-blue dark:text-brand-sky">x-api-key: &lt;value&gt;</code> on every request.</p>
-          </div>
-        </div>
-
         <!-- Headers tab -->
         <div v-if="activeTab === 'headers'" class="p-5 space-y-3">
           <div
@@ -194,12 +168,12 @@
           <DocsTestLabJsonEditor v-model="body" />
         </div>
 
-        <!-- Variables tab (admin only) -->
+        <!-- Variables tab -->
         <div v-if="activeTab === 'variables'" class="p-5 space-y-4">
           <p class="text-[11.5px] text-ink-muted dark:text-dark-subtle leading-relaxed">
-            Define global variables. Use
-            <code class="font-mono text-[#e07b3c] dark:text-[#e8a76b] bg-surface-sage dark:bg-dark-sidebar px-1 py-0.5 rounded text-[11px]">&#123;&#123;key&#125;&#125;</code>
-            in paths, headers, and body to substitute values at send-time.
+            Override variables for this test run. Use
+            <code class="font-mono text-[#e07b3c] dark:text-[#e8a76b] bg-surface-sage dark:bg-dark-sidebar px-1 py-0.5 rounded text-[11px]">&#123;&#123;variable_name&#125;&#125;</code>
+            in paths and body. Changes here are session-only and not saved.
           </p>
 
           <div class="space-y-2">
@@ -233,7 +207,8 @@
             Add variable
           </button>
 
-          <div class="pt-3 border-t border-surface-sage dark:border-dark-border flex items-center gap-3">
+          <!-- Save defaults (admin only) -->
+          <div v-if="isAdmin" class="pt-3 border-t border-surface-sage dark:border-dark-border flex items-center gap-3">
             <button
               type="button"
               class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-semibold text-white bg-brand-green hover:bg-brand-green/90 transition-colors disabled:opacity-60"
@@ -242,7 +217,7 @@
             >
               <svg v-if="variablesSaving" class="animate-spin shrink-0" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
               <UiIcon v-else name="save" size="xs" class="shrink-0" />
-              {{ variablesSaving ? 'Saving…' : 'Save variables' }}
+              {{ variablesSaving ? 'Saving…' : 'Save as defaults' }}
             </button>
             <span v-if="variablesSaved" class="text-[12px] text-emerald-600 dark:text-emerald-400 font-medium">Saved</span>
           </div>
@@ -307,7 +282,6 @@
       <div v-if="isAdmin" class="shrink-0 border-t border-surface-sage dark:border-dark-border bg-surface-off-white dark:bg-dark-sidebar px-5 py-3">
         <div class="flex items-center gap-2 flex-wrap">
           <span class="text-[11px] font-medium text-ink-muted dark:text-dark-subtle mr-1">Save to draft:</span>
-          <button type="button" class="save-chip" @click="saveAuth">Auth</button>
           <button type="button" class="save-chip" @click="saveHeaders">Headers</button>
           <button type="button" class="save-chip" @click="saveBody">Body</button>
           <!-- Path & method chip — only visible when changed -->
@@ -367,7 +341,6 @@ const props = defineProps<Props>()
 
 const emit = defineEmits<{
   close: []
-  'save-auth': [value: string]
   'save-headers': [headers: CollectionHeader[]]
   'save-body': [body: string]
   'save-response': [entry: { status: number; statusText: string; body: string }]
@@ -382,9 +355,8 @@ const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
 
 // ── Local state ───────────────────────────────────────────────────────────────
 
-const activeTab = ref<'auth' | 'headers' | 'body' | 'variables'>('body')
+const activeTab = ref<'headers' | 'body' | 'variables'>('body')
 const responseTab = ref('Body')
-const showApiKey = ref(false)
 const sending = ref(false)
 const sendError = ref<string | null>(null)
 const response = ref<ResponseData | null>(null)
@@ -399,29 +371,30 @@ watch(() => props.method, (v) => { localMethod.value = v })
 watch(() => props.path, (v) => { localPath.value = v })
 
 // Editable copies — pre-filled from props
-const authKey = ref(props.auth ?? '')
 const headers = ref<{ key: string; value: string }[]>([])
 const body = ref(props.body ?? '{}')
 
-// Variables (admin only)
 const variableRows = ref<{ key: string; value: string }[]>([])
 const variablesSaving = ref(false)
 const variablesSaved = ref(false)
 
-// Seed headers from props
+// Seed headers from props (inject x-api-key from props.auth if set and not already present)
 watchEffect(() => {
-  headers.value = props.headers
+  const base = props.headers
     .filter(h => !h.disabled)
     .map(h => ({ key: h.key, value: h.value ?? '' }))
+  const hasApiKey = base.some(h => h.key.toLowerCase() === 'x-api-key')
+  if (props.auth && !hasApiKey) {
+    headers.value = [{ key: 'x-api-key', value: props.auth }, ...base]
+  } else {
+    headers.value = base
+  }
 })
-
-// Seed auth
-watchEffect(() => { authKey.value = props.auth ?? '' })
 
 // Seed body
 watchEffect(() => { body.value = props.body ?? '{}' })
 
-// Load variables on mount (admin only)
+// Load variables on mount — admin only
 onMounted(async () => {
   if (!isAdmin.value) return
   try {
@@ -429,11 +402,8 @@ onMounted(async () => {
       headers: authHeaders(),
     })
     variableRows.value = Object.entries(data).map(([key, value]) => ({ key, value }))
-    if (variableRows.value.length === 0) {
-      variableRows.value.push({ key: '', value: '' })
-    }
   } catch {
-    variableRows.value = [{ key: '', value: '' }]
+    // leave variableRows empty for admin if load fails
   }
 })
 
@@ -472,17 +442,12 @@ const isMethodPathDirty = computed(() =>
 )
 
 const tabs = computed(() => {
-  const base: { id: 'auth' | 'headers' | 'body' | 'variables'; label: string; count: number }[] = [
-    { id: 'auth',    label: 'Auth',    count: authKey.value ? 1 : 0 },
-    { id: 'headers', label: 'Headers', count: headers.value.filter(h => h.key).length },
-    { id: 'body',    label: 'Body',    count: 0 },
+  const base = [
+    { id: 'headers' as const,   label: 'Headers',   count: headers.value.filter(h => h.key).length },
+    { id: 'body' as const,      label: 'Body',      count: 0 },
   ]
   if (isAdmin.value) {
-    base.push({
-      id: 'variables',
-      label: 'Variables',
-      count: variableRows.value.filter(r => r.key.trim()).length,
-    })
+    base.push({ id: 'variables' as const, label: 'Variables', count: variableRows.value.filter(r => r.key.trim()).length })
   }
   return base
 })
@@ -507,13 +472,12 @@ const curlCopied = ref(false)
 
 const curlCommand = computed(() => {
   const resolvedPath = applyVars(localPath.value)
-  const targetUrl = props.baseUrl.replace(/\/$/, '') + resolvedPath
+  const targetUrl = resolveBaseUrl() + resolvedPath
   const method = localMethod.value.toUpperCase()
 
   const reqHeaders: Record<string, string> = {}
-  if (authKey.value) reqHeaders['x-api-key'] = applyVars(authKey.value)
   for (const h of headers.value) {
-    if (h.key.trim()) reqHeaders[h.key.trim()] = applyVars(h.value)
+    if (h.key.trim()) reqHeaders[h.key.trim()] = h.value
   }
   const hasBody = ['POST', 'PUT', 'PATCH'].includes(method)
   if (hasBody && !reqHeaders['Content-Type'] && !reqHeaders['content-type']) {
@@ -539,12 +503,28 @@ async function copyCurl() {
 
 // ── Variable helpers ──────────────────────────────────────────────────────────
 
-function applyVars(str: string): string {
+function buildVarMap(): Record<string, string> {
   const vars: Record<string, string> = {}
   for (const row of variableRows.value) {
     if (row.key.trim()) vars[row.key.trim()] = row.value
   }
-  return str.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? `{{${key}}}`)
+  return vars
+}
+
+// Replaces {{ variable_name }} (with optional whitespace) anywhere in a string.
+// Unknown variable names are left as-is so the request still goes through.
+function applyVars(str: string): string {
+  const vars = buildVarMap()
+  return str.replace(/\{\{\s*([\w-]+)\s*\}\}/g, (match, key) => {
+    const trimmed = key.trim()
+    return trimmed in vars ? vars[trimmed]! : match
+  })
+}
+
+// Resolves the base URL — uses the base_url variable if the user has set one.
+function resolveBaseUrl(): string {
+  const vars = buildVarMap()
+  return (vars['base_url'] ?? props.baseUrl).replace(/\/$/, '')
 }
 
 function addVariable() {
@@ -606,13 +586,12 @@ async function sendRequest() {
   responseTab.value = 'Body'
 
   const resolvedPath = applyVars(localPath.value)
-  const targetUrl = props.baseUrl.replace(/\/$/, '') + resolvedPath
+  const targetUrl = resolveBaseUrl() + resolvedPath
   const method = localMethod.value.toUpperCase()
 
   const reqHeaders: Record<string, string> = {}
-  if (authKey.value) reqHeaders['x-api-key'] = applyVars(authKey.value)
   for (const h of headers.value) {
-    if (h.key.trim()) reqHeaders[h.key.trim()] = applyVars(h.value)
+    if (h.key.trim()) reqHeaders[h.key.trim()] = h.value
   }
 
   const hasBody = ['POST', 'PUT', 'PATCH'].includes(method)
@@ -672,10 +651,6 @@ function httpStatusText(code: number): string {
 }
 
 // ── Admin save actions ────────────────────────────────────────────────────────
-
-function saveAuth() {
-  emit('save-auth', authKey.value)
-}
 
 function saveHeaders() {
   const out: CollectionHeader[] = headers.value
