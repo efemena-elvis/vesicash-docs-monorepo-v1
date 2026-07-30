@@ -428,7 +428,7 @@ const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
 
 // ── Local state ───────────────────────────────────────────────────────────────
 
-const activeTab = ref<'params' | 'query' | 'headers' | 'body' | 'variables'>('params')
+const activeTab = ref<'headers' | 'body' | 'params' | 'query' | 'variables'>('headers')
 const responseTab = ref('Body')
 const sending = ref(false)
 const sendError = ref<string | null>(null)
@@ -564,11 +564,11 @@ const isMethodPathDirty = computed(() =>
 )
 
 const tabs = computed(() => {
-  const base: { id: 'params' | 'query' | 'headers' | 'body' | 'variables'; label: string; count: number }[] = [
-    { id: 'params',  label: 'Params',  count: paramsRows.value.filter(r => r.key.trim() && r.value.trim()).length },
-    { id: 'query',   label: 'Query',   count: queryRows.value.filter(r => r.key.trim()).length },
+  const base: { id: 'headers' | 'body' | 'params' | 'query' | 'variables'; label: string; count: number }[] = [
     { id: 'headers', label: 'Headers', count: headers.value.filter(h => h.key).length },
     { id: 'body',    label: 'Body',    count: 0 },
+    { id: 'params',  label: 'Params',  count: paramsRows.value.filter(r => r.key.trim() && r.value.trim()).length },
+    { id: 'query',   label: 'Query',   count: queryRows.value.filter(r => r.key.trim()).length },
   ]
   if (isAdmin.value) {
     base.push({ id: 'variables', label: 'Variables', count: variableRows.value.filter(r => r.key.trim()).length })
