@@ -132,6 +132,71 @@
       </div>
 
       <div class="flex-1 overflow-y-auto">
+        <!-- Params tab -->
+        <div v-if="activeTab === 'params'" class="p-5 space-y-3">
+          <p v-if="paramsRows.length === 0" class="text-[11.5px] text-ink-muted dark:text-dark-subtle">
+            No path parameters detected. Add them manually or use <code class="font-mono text-[11px]">{param}</code> in the path above.
+          </p>
+          <div
+            v-for="(row, pi) in paramsRows"
+            :key="pi"
+            class="flex items-center gap-2"
+          >
+            <input
+              :value="row.key"
+              placeholder="param_name"
+              class="tl-input flex-1 font-mono text-[12px]"
+              spellcheck="false"
+              @input="updateParam(pi, 'key', ($event.target as HTMLInputElement).value)"
+            />
+            <input
+              :value="row.value"
+              placeholder="value"
+              class="tl-input flex-1 font-mono text-[12px]"
+              spellcheck="false"
+              @input="updateParam(pi, 'value', ($event.target as HTMLInputElement).value)"
+            />
+            <button type="button" class="tl-icon-btn text-red-400 hover:text-red-500" @click="removeParam(pi)">
+              <UiIcon name="close" size="xs" />
+            </button>
+          </div>
+          <button type="button" class="tl-add-btn" @click="addParam">
+            <UiIcon name="plus" size="xs" />
+            Add param
+          </button>
+        </div>
+
+        <!-- Query tab -->
+        <div v-if="activeTab === 'query'" class="p-5 space-y-3">
+          <div
+            v-for="(row, qi) in queryRows"
+            :key="qi"
+            class="flex items-center gap-2"
+          >
+            <input
+              :value="row.key"
+              placeholder="key"
+              class="tl-input flex-1 font-mono text-[12px]"
+              spellcheck="false"
+              @input="updateQuery(qi, 'key', ($event.target as HTMLInputElement).value)"
+            />
+            <input
+              :value="row.value"
+              placeholder="value"
+              class="tl-input flex-1 font-mono text-[12px]"
+              spellcheck="false"
+              @input="updateQuery(qi, 'value', ($event.target as HTMLInputElement).value)"
+            />
+            <button type="button" class="tl-icon-btn text-red-400 hover:text-red-500" @click="removeQuery(qi)">
+              <UiIcon name="close" size="xs" />
+            </button>
+          </div>
+          <button type="button" class="tl-add-btn" @click="addQuery">
+            <UiIcon name="plus" size="xs" />
+            Add query param
+          </button>
+        </div>
+
         <!-- Headers tab -->
         <div v-if="activeTab === 'headers'" class="p-5 space-y-3">
           <div
@@ -168,12 +233,12 @@
           <DocsTestLabJsonEditor v-model="body" />
         </div>
 
-        <!-- Variables tab -->
+        <!-- Variables tab (admin only) -->
         <div v-if="activeTab === 'variables'" class="p-5 space-y-4">
           <p class="text-[11.5px] text-ink-muted dark:text-dark-subtle leading-relaxed">
-            Override variables for this test run. Use
+            Wildcard variables replaced at runtime via
             <code class="font-mono text-[#e07b3c] dark:text-[#e8a76b] bg-surface-sage dark:bg-dark-sidebar px-1 py-0.5 rounded text-[11px]">&#123;&#123;variable_name&#125;&#125;</code>
-            in paths and body. Changes here are session-only and not saved.
+            in paths and body. Session-only unless saved as defaults.
           </p>
 
           <div class="space-y-2">
@@ -207,8 +272,8 @@
             Add variable
           </button>
 
-          <!-- Save defaults (admin only) -->
-          <div v-if="isAdmin" class="pt-3 border-t border-surface-sage dark:border-dark-border flex items-center gap-3">
+          <!-- Save defaults -->
+          <div class="pt-3 border-t border-surface-sage dark:border-dark-border flex items-center gap-3">
             <button
               type="button"
               class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-semibold text-white bg-brand-green hover:bg-brand-green/90 transition-colors disabled:opacity-60"
@@ -282,6 +347,8 @@
       <div v-if="isAdmin" class="shrink-0 border-t border-surface-sage dark:border-dark-border bg-surface-off-white dark:bg-dark-sidebar px-5 py-3">
         <div class="flex items-center gap-2 flex-wrap">
           <span class="text-[11px] font-medium text-ink-muted dark:text-dark-subtle mr-1">Save to draft:</span>
+          <button type="button" class="save-chip" @click="savePathParams">Params</button>
+          <button type="button" class="save-chip" @click="saveQueryParams">Query</button>
           <button type="button" class="save-chip" @click="saveHeaders">Headers</button>
           <button type="button" class="save-chip" @click="saveBody">Body</button>
           <!-- Path & method chip — only visible when changed -->
@@ -319,6 +386,8 @@
 <script setup lang="ts">
 import type { CollectionHeader } from '~/types/page'
 
+type KVRow = { key: string; value: string }
+
 interface Props {
   open: boolean
   method: string
@@ -327,6 +396,8 @@ interface Props {
   headers: CollectionHeader[]
   body: string | null
   auth: string | null
+  pathParams: KVRow[] | null
+  queryParams: KVRow[] | null
 }
 
 interface ResponseData {
@@ -341,6 +412,8 @@ const props = defineProps<Props>()
 
 const emit = defineEmits<{
   close: []
+  'save-path-params': [params: KVRow[]]
+  'save-query-params': [params: KVRow[]]
   'save-headers': [headers: CollectionHeader[]]
   'save-body': [body: string]
   'save-response': [entry: { status: number; statusText: string; body: string }]
@@ -355,7 +428,7 @@ const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
 
 // ── Local state ───────────────────────────────────────────────────────────────
 
-const activeTab = ref<'headers' | 'body' | 'variables'>('body')
+const activeTab = ref<'params' | 'query' | 'headers' | 'body' | 'variables'>('params')
 const responseTab = ref('Body')
 const sending = ref(false)
 const sendError = ref<string | null>(null)
@@ -371,14 +444,63 @@ watch(() => props.method, (v) => { localMethod.value = v })
 watch(() => props.path, (v) => { localPath.value = v })
 
 // Editable copies — pre-filled from props
-const headers = ref<{ key: string; value: string }[]>([])
+const headers = ref<KVRow[]>([])
 const body = ref(props.body ?? '{}')
 
-const variableRows = ref<{ key: string; value: string }[]>([])
+const paramsRows = ref<KVRow[]>([])
+const queryRows = ref<KVRow[]>([])
+const variableRows = ref<KVRow[]>([])
 const variablesSaving = ref(false)
 const variablesSaved = ref(false)
 
-// Seed headers from props (inject x-api-key from props.auth if set and not already present)
+// ── Path param auto-detection ──────────────────────────────────────────────
+
+function extractPathParams(path: string): string[] {
+  const seen = new Set<string>()
+  const keys: string[] = []
+  // {param} style (OpenAPI / REST docs)
+  for (const m of path.matchAll(/\{([\w-]+)\}/g)) {
+    if (!seen.has(m[1]!)) { seen.add(m[1]!); keys.push(m[1]!) }
+  }
+  // :param style (Express / path-to-regexp)
+  for (const m of path.matchAll(/\/:(\w+)/g)) {
+    if (!seen.has(m[1]!)) { seen.add(m[1]!); keys.push(m[1]!) }
+  }
+  return keys
+}
+
+// Merge detected path params with any saved values, preserving user edits
+function syncParamRows(path: string, saved: KVRow[]) {
+  const savedMap = new Map(saved.map(r => [r.key, r.value]))
+  const existing = new Map(paramsRows.value.map(r => [r.key, r.value]))
+  const detected = extractPathParams(path)
+  const merged: KVRow[] = detected.map(key => ({
+    key,
+    value: existing.get(key) ?? savedMap.get(key) ?? '',
+  }))
+  // Retain any manually added rows whose key doesn't appear in detected
+  for (const row of paramsRows.value) {
+    if (!merged.find(r => r.key === row.key)) merged.push({ ...row })
+  }
+  paramsRows.value = merged
+}
+
+// Seed params from props on open / path prop change
+watchEffect(() => {
+  syncParamRows(localPath.value, props.pathParams ?? [])
+})
+
+// Update detected params when admin edits path live
+watch(localPath, (path) => {
+  syncParamRows(path, props.pathParams ?? [])
+})
+
+// Seed query rows from props
+watchEffect(() => {
+  queryRows.value = (props.queryParams ?? []).map(r => ({ key: r.key, value: r.value }))
+})
+
+// Seed headers from props (inject x-api-key from props.auth if not already present)
 watchEffect(() => {
   const base = props.headers
     .filter(h => !h.disabled)
@@ -403,7 +525,7 @@ onMounted(async () => {
     })
     variableRows.value = Object.entries(data).map(([key, value]) => ({ key, value }))
   } catch {
-    // leave variableRows empty for admin if load fails
+    // leave variableRows empty if load fails
   }
 })
 
@@ -442,9 +564,11 @@ const isMethodPathDirty = computed(() =>
 )
 
 const tabs = computed(() => {
-  const base: { id: 'headers' | 'body' | 'variables'; label: string; count: number }[] = [
-    { id: 'headers',   label: 'Headers',   count: headers.value.filter(h => h.key).length },
-    { id: 'body',      label: 'Body',      count: 0 },
+  const base: { id: 'params' | 'query' | 'headers' | 'body' | 'variables'; label: string; count: number }[] = [
+    { id: 'params',  label: 'Params',  count: paramsRows.value.filter(r => r.key.trim() && r.value.trim()).length },
+    { id: 'query',   label: 'Query',   count: queryRows.value.filter(r => r.key.trim()).length },
+    { id: 'headers', label: 'Headers', count: headers.value.filter(h => h.key).length },
+    { id: 'body',    label: 'Body',    count: 0 },
   ]
   if (isAdmin.value) {
     base.push({ id: 'variables', label: 'Variables', count: variableRows.value.filter(r => r.key.trim()).length })
@@ -471,8 +595,9 @@ const prettyResponseBody = computed(() => {
 const curlCopied = ref(false)
 
 const curlCommand = computed(() => {
-  const resolvedPath = applyVars(localPath.value)
-  const targetUrl = resolveBaseUrl() + resolvedPath
+  const resolvedPath = buildRequestPath()
+  const queryStr = buildQueryString()
+  const targetUrl = resolveBaseUrl() + resolvedPath + queryStr
   const method = localMethod.value.toUpperCase()
 
   const reqHeaders: Record<string, string> = {}
@@ -501,7 +626,7 @@ async function copyCurl() {
   setTimeout(() => { curlCopied.value = false }, 2000)
 }
 
-// ── Variable helpers ──────────────────────────────────────────────────────────
+// ── URL builders ──────────────────────────────────────────────────────────────
 
 function buildVarMap(): Record<string, string> {
   const vars: Record<string, string> = {}
@@ -511,8 +636,6 @@ function buildVarMap(): Record<string, string> {
   return vars
 }
 
-// Replaces {{ variable_name }} (with optional whitespace) anywhere in a string.
-// Unknown variable names are left as-is so the request still goes through.
 function applyVars(str: string): string {
   const vars = buildVarMap()
   return str.replace(/\{\{\s*([\w-]+)\s*\}\}/g, (match, key) => {
@@ -521,11 +644,62 @@ function applyVars(str: string): string {
   })
 }
 
-// Resolves the base URL — uses the base_url variable if the user has set one.
 function resolveBaseUrl(): string {
   const vars = buildVarMap()
   return (vars['base_url'] ?? props.baseUrl).replace(/\/$/, '')
 }
+
+// Substitutes path params then applies variable overrides
+function buildRequestPath(): string {
+  let p = localPath.value
+  for (const row of paramsRows.value) {
+    const key = row.key.trim()
+    if (!key || !row.value.trim()) continue
+    const encoded = encodeURIComponent(row.value)
+    p = p.replace(new RegExp(`\\{${key}\\}`, 'g'), encoded)
+    p = p.replace(new RegExp(`/:${key}(?=/|$)`, 'g'), `/${encoded}`)
+  }
+  return applyVars(p)
+}
+
+function buildQueryString(): string {
+  const filled = queryRows.value.filter(r => r.key.trim())
+  if (!filled.length) return ''
+  const parts = filled.map(r =>
+    `${encodeURIComponent(r.key.trim())}=${encodeURIComponent(r.value)}`
+  )
+  return '?' + parts.join('&')
+}
+
+// ── Params helpers ────────────────────────────────────────────────────────────
+
+function addParam() {
+  paramsRows.value.push({ key: '', value: '' })
+}
+
+function removeParam(pi: number) {
+  paramsRows.value.splice(pi, 1)
+}
+
+function updateParam(pi: number, field: 'key' | 'value', val: string) {
+  paramsRows.value[pi]![field] = val
+}
+
+// ── Query helpers ─────────────────────────────────────────────────────────────
+
+function addQuery() {
+  queryRows.value.push({ key: '', value: '' })
+}
+
+function removeQuery(qi: number) {
+  queryRows.value.splice(qi, 1)
+}
+
+function updateQuery(qi: number, field: 'key' | 'value', val: string) {
+  queryRows.value[qi]![field] = val
+}
+
+// ── Variable helpers ──────────────────────────────────────────────────────────
 
 function addVariable() {
   variableRows.value.push({ key: '', value: '' })
@@ -585,8 +759,9 @@ async function sendRequest() {
   response.value = null
   responseTab.value = 'Body'
 
-  const resolvedPath = applyVars(localPath.value)
-  const targetUrl = resolveBaseUrl() + resolvedPath
+  const resolvedPath = buildRequestPath()
+  const queryStr = buildQueryString()
+  const targetUrl = resolveBaseUrl() + resolvedPath + queryStr
   const method = localMethod.value.toUpperCase()
 
   const reqHeaders: Record<string, string> = {}
@@ -651,6 +826,14 @@ function httpStatusText(code: number): string {
 }
 
 // ── Admin save actions ────────────────────────────────────────────────────────
+
+function savePathParams() {
+  emit('save-path-params', paramsRows.value.filter(r => r.key.trim()))
+}
+
+function saveQueryParams() {
+  emit('save-query-params', queryRows.value.filter(r => r.key.trim()))
+}
 
 function saveHeaders() {
   const out: CollectionHeader[] = headers.value
