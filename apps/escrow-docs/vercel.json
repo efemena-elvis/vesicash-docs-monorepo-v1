@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd $(git rev-parse --show-toplevel) && pnpm install && pnpm turbo run build --filter=escrow-docs",
+  "buildCommand": "cd ../.. && pnpm install && pnpm turbo run build --filter=escrow-docs",
   "outputDirectory": ".output",
   "installCommand": "echo 'install handled by buildCommand'",
   "headers": [
