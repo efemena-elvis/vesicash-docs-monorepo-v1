@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd ../.. && pnpm install && pnpm turbo run build --filter=portal-docs",
+  "buildCommand": "cd $(git rev-parse --show-toplevel) && pnpm install && pnpm turbo run build --filter=portal-docs",
   "outputDirectory": ".output",
   "installCommand": "echo 'install handled by buildCommand'",
   "headers": [
