@@ -8,7 +8,7 @@
 const docsConfig = {
   // ── API ────────────────────────────────────────────────────────────────────
   api: {
-    baseUrl: "https://api.escrow.vesicash.com",
+    baseUrl: "https://escrow.vesicash.com",
   },
 
   // ── Site metadata ──────────────────────────────────────────────────────────
