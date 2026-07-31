@@ -31,8 +31,9 @@
 
       <!-- ── Request row ──────────────────────────────────────────── -->
       <div class="shrink-0 flex items-center gap-2.5 px-5 py-3 border-b border-surface-sage dark:border-dark-border bg-surface-off-white dark:bg-dark-sidebar">
-        <!-- Method: custom dropdown (admin) or static badge (viewer) -->
-        <div v-if="isAdmin" class="relative shrink-0">
+
+        <!-- Method badge — shrink-0, self-start so it stays on first line when URL wraps -->
+        <div v-if="isAdmin" class="relative shrink-0 self-start mt-[3px]">
           <button
             type="button"
             class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10.5px] font-bold uppercase tracking-wider font-sans select-none"
@@ -42,14 +43,7 @@
             {{ localMethod }}
             <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
-          <!-- Click-away overlay -->
-          <div
-            v-if="methodDropdownOpen"
-            class="fixed inset-0"
-            style="z-index: 51"
-            @click="methodDropdownOpen = false"
-          />
-          <!-- Dropdown menu -->
+          <div v-if="methodDropdownOpen" class="fixed inset-0" style="z-index: 51" @click="methodDropdownOpen = false" />
           <div
             v-if="methodDropdownOpen"
             class="absolute top-full left-0 mt-1.5 bg-white dark:bg-dark-surface border border-surface-sage-dark dark:border-dark-border rounded-lg shadow-xl py-1 min-w-[104px]"
@@ -62,36 +56,35 @@
               class="w-full flex items-center gap-2.5 px-3 py-1.5 text-left hover:bg-surface-sage dark:hover:bg-dark-sidebar transition-colors"
               @click.stop="selectMethod(m)"
             >
-              <span
-                class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
-                :style="methodColorStyle(m)"
-              >{{ m }}</span>
+              <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider" :style="methodColorStyle(m)">{{ m }}</span>
             </button>
           </div>
         </div>
-        <span
-          v-else
-          class="shrink-0 inline-flex items-center px-2 py-0.5 rounded text-[10.5px] font-bold uppercase tracking-wider font-sans"
-          :style="methodBadgeStyle"
-        >{{ localMethod }}</span>
+        <span v-else class="shrink-0 self-start mt-[3px] inline-flex items-center px-2 py-0.5 rounded text-[10.5px] font-bold uppercase tracking-wider font-sans" :style="methodBadgeStyle">{{ localMethod }}</span>
 
-        <!-- URL row: base_url label + editable path (admin) or static (viewer) -->
-        <div class="flex-1 min-w-0 overflow-hidden flex items-center font-mono text-[12.5px]">
-          <span class="shrink-0 text-[#e07b3c] dark:text-[#e8a76b]">{{ baseUrlLabel }}</span>
-          <input
-            v-if="isAdmin"
-            v-model="localPath"
-            class="flex-1 min-w-0 bg-transparent border-none outline-none text-ink-primary dark:text-dark-text font-mono text-[12.5px] placeholder:text-ink-muted dark:placeholder:text-dark-subtle"
-            placeholder="/path"
+        <!-- URL area — flex-1, grows downward as route wraps -->
+        <div class="flex-1 min-w-0 font-mono text-[12.5px] leading-relaxed">
+          <!-- Non-admin: one continuous text block, wraps like a sentence -->
+          <p v-if="!isAdmin" class="m-0 break-all">
+            <span class="text-[#e07b3c] dark:text-[#e8a76b]">{{ baseUrlLabel }}</span><span class="text-ink-primary dark:text-dark-text">{{ localPath }}</span><span v-if="queryPreview" class="text-ink-muted dark:text-dark-subtle">{{ queryPreview }}</span>
+          </p>
+          <!-- Admin: contenteditable — base_url + path flow as one entity -->
+          <div
+            v-else
+            ref="urlEditable"
+            contenteditable="true"
+            class="outline-none break-all text-ink-primary dark:text-dark-text"
             spellcheck="false"
-            autocomplete="off"
+            @keydown="onUrlKeydown"
+            @input="onUrlInput"
+            @paste.prevent="onUrlPaste"
           />
-          <span v-else class="flex-1 min-w-0 truncate text-ink-primary dark:text-dark-text">{{ localPath }}</span>
         </div>
 
+        <!-- Send — shrink-0, self-start so it stays on first line when URL wraps -->
         <button
           type="button"
-          class="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12.5px] font-semibold text-white transition-all duration-150 disabled:opacity-60"
+          class="shrink-0 self-start inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12.5px] font-semibold text-white transition-all duration-150 disabled:opacity-60"
           :class="sending ? 'bg-brand-green/80 cursor-not-allowed' : 'bg-brand-green hover:bg-brand-green/90 active:scale-[0.98]'"
           :disabled="sending"
           @click="sendRequest"
@@ -132,6 +125,37 @@
       </div>
 
       <div class="flex-1 overflow-y-auto">
+        <!-- Params tab — free-form query string params (?key=value) -->
+        <div v-if="activeTab === 'params'" class="p-5 space-y-3">
+          <div
+            v-for="(row, pi) in paramsRows"
+            :key="pi"
+            class="flex items-center gap-2"
+          >
+            <input
+              :value="row.key"
+              placeholder="key"
+              class="tl-input flex-1 font-mono text-[12px]"
+              spellcheck="false"
+              @input="updateParam(pi, 'key', ($event.target as HTMLInputElement).value)"
+            />
+            <input
+              :value="row.value"
+              placeholder="value"
+              class="tl-input flex-1 font-mono text-[12px]"
+              spellcheck="false"
+              @input="updateParam(pi, 'value', ($event.target as HTMLInputElement).value)"
+            />
+            <button type="button" class="tl-icon-btn text-red-400 hover:text-red-500" @click="removeParam(pi)">
+              <UiIcon name="close" size="xs" />
+            </button>
+          </div>
+          <button type="button" class="tl-add-btn" @click="addParam">
+            <UiIcon name="plus" size="xs" />
+            Add param
+          </button>
+        </div>
+
         <!-- Headers tab -->
         <div v-if="activeTab === 'headers'" class="p-5 space-y-3">
           <div
@@ -168,12 +192,12 @@
           <DocsTestLabJsonEditor v-model="body" />
         </div>
 
-        <!-- Variables tab -->
+        <!-- Variables tab (admin only) -->
         <div v-if="activeTab === 'variables'" class="p-5 space-y-4">
           <p class="text-[11.5px] text-ink-muted dark:text-dark-subtle leading-relaxed">
-            Override variables for this test run. Use
+            Wildcard variables replaced at runtime via
             <code class="font-mono text-[#e07b3c] dark:text-[#e8a76b] bg-surface-sage dark:bg-dark-sidebar px-1 py-0.5 rounded text-[11px]">&#123;&#123;variable_name&#125;&#125;</code>
-            in paths and body. Changes here are session-only and not saved.
+            in paths and body. Session-only unless saved as defaults.
           </p>
 
           <div class="space-y-2">
@@ -207,8 +231,8 @@
             Add variable
           </button>
 
-          <!-- Save defaults (admin only) -->
-          <div v-if="isAdmin" class="pt-3 border-t border-surface-sage dark:border-dark-border flex items-center gap-3">
+          <!-- Save defaults -->
+          <div class="pt-3 border-t border-surface-sage dark:border-dark-border flex items-center gap-3">
             <button
               type="button"
               class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-semibold text-white bg-brand-green hover:bg-brand-green/90 transition-colors disabled:opacity-60"
@@ -282,6 +306,7 @@
       <div v-if="isAdmin" class="shrink-0 border-t border-surface-sage dark:border-dark-border bg-surface-off-white dark:bg-dark-sidebar px-5 py-3">
         <div class="flex items-center gap-2 flex-wrap">
           <span class="text-[11px] font-medium text-ink-muted dark:text-dark-subtle mr-1">Save to draft:</span>
+          <button type="button" class="save-chip" @click="saveParams">Params</button>
           <button type="button" class="save-chip" @click="saveHeaders">Headers</button>
           <button type="button" class="save-chip" @click="saveBody">Body</button>
           <!-- Path & method chip — only visible when changed -->
@@ -319,6 +344,8 @@
 <script setup lang="ts">
 import type { CollectionHeader } from '~/types/page'
 
+type KVRow = { key: string; value: string }
+
 interface Props {
   open: boolean
   method: string
@@ -327,6 +354,7 @@ interface Props {
   headers: CollectionHeader[]
   body: string | null
   auth: string | null
+  pathParams: KVRow[] | null
 }
 
 interface ResponseData {
@@ -341,6 +369,7 @@ const props = defineProps<Props>()
 
 const emit = defineEmits<{
   close: []
+  'save-params': [params: KVRow[]]
   'save-headers': [headers: CollectionHeader[]]
   'save-body': [body: string]
   'save-response': [entry: { status: number; statusText: string; body: string }]
@@ -355,7 +384,7 @@ const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
 
 // ── Local state ───────────────────────────────────────────────────────────────
 
-const activeTab = ref<'headers' | 'body' | 'variables'>('body')
+const activeTab = ref<'headers' | 'body' | 'params' | 'query' | 'variables'>('headers')
 const responseTab = ref('Body')
 const sending = ref(false)
 const sendError = ref<string | null>(null)
@@ -370,15 +399,128 @@ const methodDropdownOpen = ref(false)
 watch(() => props.method, (v) => { localMethod.value = v })
 watch(() => props.path, (v) => { localPath.value = v })
 
+// ── Contenteditable URL input (admin) — base_url + path as one entity ────────
+
+const urlEditable = ref<HTMLElement | null>(null)
+let _externalPathUpdate = false
+
+function initUrlEditable() {
+  const el = urlEditable.value
+  if (!el) return
+  el.innerHTML = ''
+  const prefix = document.createElement('span')
+  prefix.setAttribute('contenteditable', 'false')
+  prefix.className = 'url-prefix-label'
+  prefix.dataset.urlPrefix = 'true'
+  prefix.textContent = baseUrlLabel
+  el.appendChild(prefix)
+  el.appendChild(document.createTextNode(localPath.value))
+  updateQuerySuffix()
+}
+
+function updateQuerySuffix() {
+  const el = urlEditable.value
+  if (!el) return
+  const existing = el.querySelector('[data-query-suffix]')
+  if (existing) existing.remove()
+  const qs = buildQueryString()
+  if (!qs) return
+  const suffix = document.createElement('span')
+  suffix.setAttribute('contenteditable', 'false')
+  suffix.className = 'url-query-suffix'
+  suffix.dataset.querySuffix = 'true'
+  suffix.textContent = qs
+  el.appendChild(suffix)
+}
+
+function getEditablePath(): string {
+  const el = urlEditable.value
+  if (!el) return ''
+  let text = ''
+  for (const node of el.childNodes) {
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const elem = node as HTMLElement
+      if (elem.dataset.urlPrefix || elem.dataset.querySuffix) continue
+    }
+    text += node.textContent ?? ''
+  }
+  return text.replace(/[\n\r]/g, '')
+}
+
+function onUrlInput() {
+  if (_externalPathUpdate) return
+  if (!urlEditable.value?.querySelector('[data-url-prefix]')) {
+    initUrlEditable(); return
+  }
+  localPath.value = getEditablePath()
+}
+
+function onUrlKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter') { e.preventDefault(); return }
+  if (e.key !== 'Backspace') return
+  const sel = window.getSelection()
+  if (!sel?.rangeCount) return
+  const range = sel.getRangeAt(0)
+  if (!range.collapsed) return
+  const prefix = urlEditable.value?.querySelector('[data-url-prefix]')
+  if (!prefix) return
+  const { startContainer, startOffset } = range
+  if (
+    (startContainer === urlEditable.value && startOffset <= 1) ||
+    (startContainer.nodeType === Node.TEXT_NODE && startOffset === 0 && startContainer.previousSibling === prefix)
+  ) {
+    e.preventDefault()
+  }
+}
+
+function onUrlPaste(e: ClipboardEvent) {
+  const text = (e.clipboardData?.getData('text/plain') ?? '').replace(/[\n\r]/g, '')
+  const sel = window.getSelection()
+  if (!sel?.rangeCount) return
+  sel.deleteFromDocument()
+  sel.getRangeAt(0).insertNode(document.createTextNode(text))
+  sel.collapseToEnd()
+  localPath.value = getEditablePath()
+}
+
+// Sync when localPath changes externally without resetting cursor
+watch(localPath, (val) => {
+  const el = urlEditable.value
+  if (!el || getEditablePath() === val) return
+  _externalPathUpdate = true
+  for (let i = el.childNodes.length - 1; i >= 0; i--) {
+    const node = el.childNodes[i]!
+    if (node.nodeType === Node.TEXT_NODE) {
+      node.textContent = val
+      _externalPathUpdate = false
+      return
+    }
+  }
+  el.appendChild(document.createTextNode(val))
+  _externalPathUpdate = false
+})
+
+watch(() => props.open, (open) => { if (open) nextTick(initUrlEditable) })
+onMounted(() => nextTick(initUrlEditable))
+
 // Editable copies — pre-filled from props
-const headers = ref<{ key: string; value: string }[]>([])
+const headers = ref<KVRow[]>([])
 const body = ref(props.body ?? '{}')
 
-const variableRows = ref<{ key: string; value: string }[]>([])
+const paramsRows = ref<KVRow[]>([])
+
+// Update query suffix in URL area whenever params change
+watch(paramsRows, () => nextTick(updateQuerySuffix), { deep: true })
+const variableRows = ref<KVRow[]>([])
 const variablesSaving = ref(false)
 const variablesSaved = ref(false)
 
-// Seed headers from props (inject x-api-key from props.auth if set and not already present)
+// Seed query string params from props
+watchEffect(() => {
+  paramsRows.value = (props.pathParams ?? []).map(r => ({ key: r.key, value: r.value }))
+})
+
+// Seed headers from props (inject x-api-key from props.auth if not already present)
 watchEffect(() => {
   const base = props.headers
     .filter(h => !h.disabled)
@@ -403,7 +545,7 @@ onMounted(async () => {
     })
     variableRows.value = Object.entries(data).map(([key, value]) => ({ key, value }))
   } catch {
-    // leave variableRows empty for admin if load fails
+    // leave variableRows empty if load fails
   }
 })
 
@@ -413,6 +555,8 @@ const shortPath = computed(() => {
   const p = localPath.value
   return p.length > 40 ? '…' + p.slice(-38) : p
 })
+
+const queryPreview = computed(() => buildQueryString())
 
 const METHOD_COLORS: Record<string, { bg: string; color: string }> = {
   GET:    { bg: '#1a5c38', color: '#5de898' },
@@ -442,9 +586,10 @@ const isMethodPathDirty = computed(() =>
 )
 
 const tabs = computed(() => {
-  const base: { id: 'headers' | 'body' | 'variables'; label: string; count: number }[] = [
-    { id: 'headers',   label: 'Headers',   count: headers.value.filter(h => h.key).length },
-    { id: 'body',      label: 'Body',      count: 0 },
+  const base: { id: 'headers' | 'body' | 'params' | 'variables'; label: string; count: number }[] = [
+    { id: 'headers', label: 'Headers', count: headers.value.filter(h => h.key).length },
+    { id: 'body',    label: 'Body',    count: 0 },
+    { id: 'params',  label: 'Params',  count: paramsRows.value.filter(r => r.key.trim()).length },
   ]
   if (isAdmin.value) {
     base.push({ id: 'variables', label: 'Variables', count: variableRows.value.filter(r => r.key.trim()).length })
@@ -471,8 +616,9 @@ const prettyResponseBody = computed(() => {
 const curlCopied = ref(false)
 
 const curlCommand = computed(() => {
-  const resolvedPath = applyVars(localPath.value)
-  const targetUrl = resolveBaseUrl() + resolvedPath
+  const resolvedPath = buildRequestPath()
+  const queryStr = buildQueryString()
+  const targetUrl = resolveBaseUrl() + resolvedPath + queryStr
   const method = localMethod.value.toUpperCase()
 
   const reqHeaders: Record<string, string> = {}
@@ -501,7 +647,7 @@ async function copyCurl() {
   setTimeout(() => { curlCopied.value = false }, 2000)
 }
 
-// ── Variable helpers ──────────────────────────────────────────────────────────
+// ── URL builders ──────────────────────────────────────────────────────────────
 
 function buildVarMap(): Record<string, string> {
   const vars: Record<string, string> = {}
@@ -511,8 +657,6 @@ function buildVarMap(): Record<string, string> {
   return vars
 }
 
-// Replaces {{ variable_name }} (with optional whitespace) anywhere in a string.
-// Unknown variable names are left as-is so the request still goes through.
 function applyVars(str: string): string {
   const vars = buildVarMap()
   return str.replace(/\{\{\s*([\w-]+)\s*\}\}/g, (match, key) => {
@@ -521,11 +665,41 @@ function applyVars(str: string): string {
   })
 }
 
-// Resolves the base URL — uses the base_url variable if the user has set one.
 function resolveBaseUrl(): string {
   const vars = buildVarMap()
   return (vars['base_url'] ?? props.baseUrl).replace(/\/$/, '')
 }
+
+// Applies variable substitution to the path
+function buildRequestPath(): string {
+  return applyVars(localPath.value)
+}
+
+// Builds ?key=value query string from Params tab rows
+function buildQueryString(): string {
+  const filled = paramsRows.value.filter(r => r.key.trim())
+  if (!filled.length) return ''
+  const parts = filled.map(r =>
+    `${encodeURIComponent(r.key.trim())}=${encodeURIComponent(r.value)}`
+  )
+  return '?' + parts.join('&')
+}
+
+// ── Params helpers ────────────────────────────────────────────────────────────
+
+function addParam() {
+  paramsRows.value.push({ key: '', value: '' })
+}
+
+function removeParam(pi: number) {
+  paramsRows.value.splice(pi, 1)
+}
+
+function updateParam(pi: number, field: 'key' | 'value', val: string) {
+  paramsRows.value[pi]![field] = val
+}
+
+// ── Variable helpers ──────────────────────────────────────────────────────────
 
 function addVariable() {
   variableRows.value.push({ key: '', value: '' })
@@ -585,8 +759,9 @@ async function sendRequest() {
   response.value = null
   responseTab.value = 'Body'
 
-  const resolvedPath = applyVars(localPath.value)
-  const targetUrl = resolveBaseUrl() + resolvedPath
+  const resolvedPath = buildRequestPath()
+  const queryStr = buildQueryString()
+  const targetUrl = resolveBaseUrl() + resolvedPath + queryStr
   const method = localMethod.value.toUpperCase()
 
   const reqHeaders: Record<string, string> = {}
@@ -651,6 +826,10 @@ function httpStatusText(code: number): string {
 }
 
 // ── Admin save actions ────────────────────────────────────────────────────────
+
+function saveParams() {
+  emit('save-params', paramsRows.value.filter(r => r.key.trim()))
+}
 
 function saveHeaders() {
   const out: CollectionHeader[] = headers.value
@@ -722,4 +901,12 @@ watch(response, () => { saveResponseState.value = 'idle' })
 .save-chip-green {
   @apply bg-brand-green/10 text-brand-green border-brand-green/30 hover:bg-brand-green/15;
 }
+
+/* Contenteditable URL prefix (base_url label) */
+.url-prefix-label { color: #e07b3c; }
+:global(.dark) .url-prefix-label { color: #e8a76b; }
+
+/* Contenteditable query string suffix (?key=value) */
+.url-query-suffix { color: #8a9bb0; }
+:global(.dark) .url-query-suffix { color: #5a7085; }
 </style>

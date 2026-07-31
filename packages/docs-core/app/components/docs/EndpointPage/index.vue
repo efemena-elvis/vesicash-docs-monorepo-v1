@@ -328,7 +328,9 @@
       :headers="requestExampleHeaders"
       :body="(mergedFields.body as string | null) ?? page.body ?? null"
       :auth="(mergedFields.testLabAuth as string | null) ?? null"
+      :path-params="(mergedFields.testLabPathParams as { key: string; value: string }[] | null) ?? null"
       @close="closeTestLab"
+      @save-params="onSaveTestLabParams"
       @save-headers="onSaveTestLabHeaders"
       @save-body="onSaveTestLabBody"
       @save-response="onSaveTestLabResponse"
@@ -449,6 +451,11 @@ function closeTestLab() {
 async function onSaveTestLabAuth(value: string) {
   if (!editMode.value) await enterEditMode()
   patchFields({ testLabAuth: value })
+}
+
+async function onSaveTestLabParams(params: { key: string; value: string }[]) {
+  if (!editMode.value) await enterEditMode()
+  patchFields({ testLabPathParams: params })
 }
 
 async function onSaveTestLabHeaders(hdrs: CollectionHeader[]) {
