@@ -18,13 +18,7 @@
           @move-down="moveItem(idx, 1)"
         >
           <template v-if="item.kind === 'section'">
-            <div v-if="item.key === 'path-params' || item.key === 'query-params'" class="px-4 pb-4 pt-2">
-              <p class="text-[11.5px] text-ink-muted dark:text-dark-subtle italic">
-                Auto-extracted from the path. Edit Method &amp; Path above to update.
-              </p>
-            </div>
             <AdminBlockForm
-              v-else
               :block="(item.section.syntheticBlock as unknown as Block)"
               @update="onSectionUpdate(item.key, $event)"
             />
@@ -175,6 +169,16 @@ function onSectionUpdate(key: string, block: Block) {
       patchFields({ method: b.props.method, path: b.props.path, baseUrl: b.props.baseUrl, hideBaseUrl: b.props.hideBaseUrl })
       break
     }
+    case 'path-params': {
+      const b = block as ParamsTableBlock
+      patchFields({ pathParamsTitle: b.props.title, pathParamsShowInToc: b.props.showInToc, pathParamsRows: b.props.rows })
+      break
+    }
+    case 'query-params': {
+      const b = block as ParamsTableBlock
+      patchFields({ queryParamsTitle: b.props.title, queryParamsShowInToc: b.props.showInToc, queryParamsRows: b.props.rows })
+      break
+    }
     case 'headers': {
       const b = block as ParamsTableBlock
       const p: Record<string, unknown> = { headersTitle: b.props.title, headersShowInToc: b.props.showInToc }
@@ -220,7 +224,14 @@ function onSectionUpdate(key: string, block: Block) {
 
 const hasDescriptionContent = computed(() => !!headingContent('description'))
 const hasAuthContent        = computed(() => !!(mergedFields.value.auth as string))
-const hasPathParams         = computed(() => /\{\{[^}]+\}\}/.test((mergedFields.value.path as string) ?? ''))
+// Auto-extract {param} names from path, merging with any saved rows so descriptions are preserved
+function autoPathParamRows(path: string, saved: ParamsTableRow[]): ParamsTableRow[] {
+  const names = [...path.matchAll(/\{([\w-]+)\}/g)].map(m => m[1]!)
+  const savedMap = new Map(saved.map(r => [r.name, r]))
+  return names.map(name => savedMap.get(name) ?? { name, type: 'string', required: true, description: '' })
+}
+
+const hasPathParams         = computed(() => /\{[\w-]+\}/.test((mergedFields.value.path as string) ?? ''))
 const hasQueryParams        = computed(() => ((mergedFields.value.path as string) ?? '').includes('?'))
 const hasHeaders            = computed(() => normalizeHeaders(mergedFields.value.headers).length > 0)
 const hasBodyParams         = computed(() => ((mergedFields.value.params as ParamsTableRow[]) ?? []).length > 0)
@@ -311,7 +322,14 @@ const allSections = computed<SectionDef[]>(() => {
       showWhen: hasPathParams.value,
       syntheticBlock: {
         id: 'ep-path-params', type: 'params-table',
-        props: { title: 'Path Parameters', rows: [] },
+        props: {
+          title: (extraFields.value.pathParamsTitle as string) ?? 'Path Parameters',
+          showInToc: (extraFields.value.pathParamsShowInToc as boolean) ?? false,
+          rows: autoPathParamRows(
+            (mf.path as string) ?? '',
+            (mf.pathParamsRows as ParamsTableRow[]) ?? [],
+          ),
+        },
         content: null,
         meta: { hidden: hiddenSections.value.includes('path-params'), ...sm['path-params'] },
       },
@@ -321,7 +339,11 @@ const allSections = computed<SectionDef[]>(() => {
       showWhen: hasQueryParams.value,
       syntheticBlock: {
         id: 'ep-query-params', type: 'params-table',
-        props: { title: 'Query Parameters', rows: [] },
+        props: {
+          title: (extraFields.value.queryParamsTitle as string) ?? 'Query Parameters',
+          showInToc: (extraFields.value.queryParamsShowInToc as boolean) ?? false,
+          rows: (mf.queryParamsRows as ParamsTableRow[]) ?? [],
+        },
         content: null,
         meta: { hidden: hiddenSections.value.includes('query-params'), ...sm['query-params'] },
       },

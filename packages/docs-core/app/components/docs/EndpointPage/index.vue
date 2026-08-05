@@ -543,17 +543,21 @@ const requestExampleHeaders = computed((): CollectionHeader[] => {
 })
 
 const pathParams = computed((): TableRow[] => {
+  const stored = (mergedFields.value.pathParamsRows as ParamsTableRow[]) ?? []
+  if (stored.length > 0) return stored
+  // Fall back: auto-extract {param} names from the path
   const path = (mergedFields.value.path as string) ?? ''
-  const matches = [...path.matchAll(/\{\{([^}]+)\}\}/g)]
-  return matches.map(m => ({
+  return [...path.matchAll(/\{([\w-]+)\}/g)].map(m => ({
     name: m[1] ?? '',
     type: 'string',
     required: true,
-    description: 'Path parameter — auto-populated from the previous step.',
+    description: '',
   }))
 })
 
 const queryParams = computed((): TableRow[] => {
+  const stored = (mergedFields.value.queryParamsRows as ParamsTableRow[]) ?? []
+  if (stored.length > 0) return stored
   const path = (mergedFields.value.path as string) ?? ''
   if (!path.includes('?')) return []
   const qs = path.split('?')[1] ?? ''

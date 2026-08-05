@@ -48,7 +48,6 @@ jobs:
         run: npm install --global vercel@latest
 
       - name: Pull Vercel project settings
-        working-directory: apps/escrow-docs
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: prj_nOKQOjbDIYsbhm9BDWBgw59x1Ptc
@@ -58,7 +57,6 @@ jobs:
             --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Build
-        working-directory: apps/escrow-docs
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: prj_nOKQOjbDIYsbhm9BDWBgw59x1Ptc
@@ -79,7 +77,6 @@ jobs:
 
       - name: Deploy
         id: deploy
-        working-directory: apps/escrow-docs
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: prj_nOKQOjbDIYsbhm9BDWBgw59x1Ptc
